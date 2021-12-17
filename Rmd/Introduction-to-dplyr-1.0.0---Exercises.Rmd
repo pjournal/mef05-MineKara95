@@ -1,0 +1,94 @@
+---
+title: 'Introduction to dplyr 1.0.0 : Exercises'
+author: "Mine Kara"
+date: "October 17, 2021"
+output: 
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+    code_folding: hide
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyverse)
+```
+# Dataset
+
+```{r raw-df}
+raw_df <- readRDS("H:\\My Drive\\R\\Exercise Files\\rp_201801_202005_df.rds")
+
+str(raw_df)
+```
+
+# Exercise 1
+
+Find the **mean** and **standard deviation** of licensed geothermal productions in all years. (Tip: Use lubridate::year to get years from date data.)
+
+```{r mean-sd}
+raw_df %>%
+  select(datetime = dt, geothermal_lic) %>%
+  group_by(year = lubridate::year(datetime)) %>%
+  summarize(mean_geo = mean(geothermal_lic), 
+            sd_geo = sd(geothermal_lic))
+```
+
+# Exercise 2
+
+Find the **hourly average** unlicensed solar (sun_ul) production levels for May 2020.
+
+``` {r avg-solar}
+raw_df %>%
+  mutate(hour = lubridate::hour(dt), month = lubridate::month(dt), year = lubridate::year(dt)) %>%
+  filter(month == 5, year == 2020) %>%
+  group_by(hour) %>%
+  summarize(hourly_avg = mean(sun_ul)) %>%
+  select(hour, avg_prod = hourly_avg)
+
+```
+
+# Exercise 3
+
+Find the **average daily percentage** change of licensed biomass (biomass_lic) in 2019. (e.g. Suppose daily production is 50 in day 1 and 53 in day 2, then the change should be (53-50)/50 -1 = 0.06) (Tip: Use lubridate::as_date to convert date time to date. Use lag and lead functions to offset values.)
+
+```{r percent-biomass}
+raw_df %>%
+  mutate(date = lubridate::as_date(dt), 
+         year = lubridate::year(dt)) %>%
+  filter(year == 2019) %>%
+  group_by(date) %>%
+  summarize(sum_bio = sum(biomass_lic)) %>%
+  transmute(date, sum_bio,
+            daily_sum_next = lead(sum_bio,1), percent_daily = (daily_sum_next - sum_bio) / sum_bio) %>%
+  summarize(avg_change = mean(percent_daily, na.rm=TRUE))
+
+```
+
+# Exercise 4
+
+Find the **yearly total production levels** in TWh (Current values are in MWh. 1 GWh is 1000 MWh and 1 TWh is 1000 GWh). (Tip: In order to avoid a lengthy summation you can use tidyr::pivot_longer to get a long format.)
+
+
+```{r yearly-total-prod}
+
+raw_df %>%
+  mutate(year=lubridate::year(dt)) %>%
+  select(-dt) %>%
+  pivot_longer(-year) %>%
+  group_by(year) %>%
+  summarise(total_production = sum(value)/10^6)
+
+```

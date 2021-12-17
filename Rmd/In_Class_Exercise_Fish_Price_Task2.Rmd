@@ -1,0 +1,251 @@
+---
+title: "Izmir’s Fish Market Prices"
+author: "Mine Kara"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: 
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+    code_folding: hide
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    number_sections: true
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyverse)
+library(RColorBrewer)
+library(stringr)
+
+set_theme = theme_classic()
+```
+# Introduction
+
+## Dataset Structure
+
+[*Here*](https://openfiles.izmir.bel.tr/100160/docs/balik_hal_fiyatlari.csv) is the dataset analyzed in this report.
+
+This report is about Izmir’s Fish Market prices.
+
+```{r raw-df}
+raw_df <- read.csv("https://raw.githubusercontent.com/MineKara95/R/main/balik_hal_fiyatlari.csv",stringsAsFactors = FALSE, header = TRUE, sep = ";", encoding="UTF-8")
+
+fish_market <- raw_df %>%
+  select(date = "TARIH", product_type = "MAL_TURU", product_name = "MAL_ADI", units = "BIRIM", min_price = "ASGARI_UCRET", max_price = "AZAMI_UCRET") %>%
+  mutate(month = lubridate::month(date, label = TRUE))
+
+str(fish_market)
+```
+
+As you can see above, this dataset includes date, product types, product names, unit, minimum price and maximum price of these product. Also, there are 18,369 observations in the dataset.
+  
+## Null Values
+
+It is determined whether null values exist in the dataset. As we can see here is that our dataset has no null values. Thus, we do not need to drop or replace any values.
+
+```{r null values}
+
+head(is.na(fish_market))
+
+sum(is.na(fish_market))
+
+```
+
+## Number of Unique Fishes
+
+There are 4 types of product and 126 unique seafood.
+
+```{r unique-product-types}
+
+unique(fish_market[c("product_type")])
+```
+
+```{r unique-fish-types}
+
+count(unique(fish_market[c("product_name")]))
+
+
+unique(fish_market$product_name)
+```
+
+
+# Monthly Average Min and Max Price of Product Types
+
+## Monthly Average Min Prices
+
+```{r avg-max-min-price}
+
+avg_max_min_price <- fish_market %>% select(date, product_type, product_name, units, min_price, max_price) %>%
+group_by(month = lubridate::month(date, label = TRUE), product_type) %>%
+summarize(avg_min_price = mean(min_price), avg_max_price = mean(max_price))
+
+avg_max_min_price
+```
+
+``` {r average-min-price}
+
+ggplot(avg_max_min_price, aes(month, avg_min_price, group = product_type, color=product_type)) +
+  geom_line() +
+  labs(x= "Month",
+       y = "Average Min Price",
+       title = "Monthly Average Min Prices of Product Types")
+
+```
+
+Monthly average min prices of the type "KÜLTÜR" (which means "Aquaculture") is lowest in almost all months. The most price changes occur in "İTHAL (DONUK)" (imported products).
+
+
+## Monthly Average Max Prices
+
+```{r average-max-price}
+
+ggplot(avg_max_min_price, aes(month, avg_max_price, group = product_type, color=product_type)) +
+  geom_line() +
+  labs(x= "Month",
+       y = "Average Max Price",
+       title = "Monthly Average Max Prices of Product Types")
+
+```
+
+Monthly average max prices of "BALIK" and "İTHAL(DONUK)" products are higher than others. The price of "BALIK" products is much higher in the summer. This is most likely due to the fishing ban.
+
+# Monthly Price Difference of Product Types
+
+```{r differences_avg_prices}
+
+avg_prices <- avg_max_min_price %>% pivot_longer(c(avg_min_price, avg_max_price), names_to = "average_prices", values_to="values") %>% 
+  group_by(month, product_type) %>% 
+  select(month, product_type, average_prices, values)
+
+avg_prices
+
+ggplot(avg_prices, aes(month, values, fill=average_prices)) +
+  geom_col(position = position_dodge(width = 0.4), alpha = 0.8) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x= "Month",
+       y = "Average Min/Max Prices",
+       title = "Monthly Price Difference of Product Types")+
+   facet_wrap(~product_type)
+```
+
+The price of "BALIK" and "KÜLTÜR" products is more variable. The difference between max and min price in "BALIK" and "KÜLTÜR" are more.
+
+# Most Expensive Fishes and Their Max Prices
+
+
+```{r expensive-fish}
+expensive_fishes <- fish_market %>%
+  group_by(product_name) %>%
+  summarize(max_price = max(max_price)) %>%
+  arrange(desc(max_price))
+
+head(expensive_fishes)
+
+```
+
+# Investigating "BARBUN"
+
+We get all types of "BARBUN" data and display their average min and max prices in each month.
+
+``` {r barbun-kaya-donuk}
+
+
+barbun_monthly_avg <- fish_market %>% 
+  filter(str_detect(product_name, "BARBUN")) %>%
+  group_by(month, product_name) %>%
+  summarize(avg_min_price = mean(min_price), avg_max_price = mean(max_price))
+
+barbun_monthly_avg_pivot <- barbun_monthly_avg %>% pivot_longer(c(avg_min_price, avg_max_price), names_to = "average_prices", values_to="values") %>% 
+  group_by(month, product_name) %>% 
+  select(month, product_name, average_prices, values)
+
+barbun_monthly_avg
+```
+
+## Barbun (Tekir)
+
+From January to October, minimum and maximum price difference of Barbun (Tekir) is very high in almost all months and it is clearly seen in the graph below. The peak of max price is in October.
+
+```{r barbun-tekir-plot}
+
+barbun_tekir  <- barbun_monthly_avg_pivot %>% 
+  filter(product_name == "BARBUN (TEKİR)")
+
+ggplot(barbun_tekir, aes(month, values, fill=average_prices)) +
+  geom_col(position = position_dodge(width = 0.4)) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x= "Month",
+       y = "Average Min/Max Prices",
+       title = "Monthly Price Difference of Barbun (Tekir)")
+
+```
+
+## Barbun (Kaya)
+
+From January to October, minimum and maximum price difference of Barbun (Kaya) is high in almost all months. However, the difference in Barbun (Tekir) is more than Barbun (Kaya).
+
+```{r barbun-kaya-plot}
+
+barbun_kaya <- barbun_monthly_avg_pivot %>% 
+  filter(product_name == "BARBUN(KAYA)")
+
+ggplot(barbun_kaya, aes(month, values, fill=average_prices)) +
+  geom_col(position = position_dodge(width = 0.4)) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x= "Month",
+       y = "Average Min/Max Prices",
+       title = "Monthly Price Difference of Barbun (Kaya)")
+
+```
+
+## Barbun (Donuk)
+
+We do not have information of all months for the Barbun (Donuk), we only have May and June data. It is clearly seen in the graph below, there is no price difference in both months for Barbun (Donuk).
+
+
+```{r barbun-donuk-plot}
+
+barbun_donuk <- barbun_monthly_avg_pivot %>% 
+  filter(product_name == "BARBUN(DONUK)")
+
+ggplot(barbun_donuk, aes(month, values, fill=average_prices)) +
+  geom_col(position = position_dodge(width = 0.4)) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x= "Month",
+       y = "Average Min/Max Prices",
+       title = "Monthly Price Difference of Barbun (Donuk)")
+
+```
+
+## Barbun Kaya (Donuk)
+
+We do not have information of all months for the Barbun Kaya (Donuk) as well. What we have is only July and August data. There is a price difference for Barbun Kaya (Donuk) in July unlike August.
+
+```{r barbun-kaya-donuk-plot}
+
+barbun_kaya_donuk <- barbun_monthly_avg_pivot %>% 
+  filter(product_name == "BARBUN KAYA (DONUK)")
+
+ggplot(barbun_kaya_donuk, aes(month, values, fill=average_prices)) +
+  geom_col(position = position_dodge(width = 0.4)) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x= "Month",
+       y = "Average Min/Max Prices",
+       title = "Monthly Price Difference of Barbun Kaya (Donuk)")
+
+```
+

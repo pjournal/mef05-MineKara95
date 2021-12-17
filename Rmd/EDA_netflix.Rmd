@@ -1,0 +1,191 @@
+---
+title: "Exploratory Analysis of Netflix Data"
+author: "Mine Kara"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+    code_folding: hide
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    number_sections: true
+---
+
+
+
+```{r setup, include=FALSE}
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(ggthemes)
+
+
+theme_set(theme_fivethirtyeight())
+
+```
+
+
+# About Netflix
+
+  **Netflix, Inc.** is an American subscription streaming service and production company. Launched on August 29, 1997, it offers a library of films and television series through distribution deals as well as its own productions, known as Netflix Originals. Netflix can be accessed via internet browser on computers, or via application software installed on smart TVs, set-top boxes connected to televisions, tablet computers, smartphones, digital media players, Blu-ray Disc players, video game consoles, and virtual reality headsets on the list of Netflix-compatible devices.
+
+# Data Reading and Cleaning
+
+## Importing Data
+
+  In this analysis, it will be given different insights about this Netflix data. First, let's take a look at the data and see which information we have. As we can see down below, there are 6234 observations of 12 following variables describing the tv shows and movies. 
+
+
+```{r read_data}
+
+netdf <- read.csv("https://raw.githubusercontent.com/ygterl/EDA-Netflix-2020-in-R/master/netflix_titles.csv", stringsAsFactors = FALSE, na.strings=c("","NA"))
+
+str(netdf)
+
+```
+
+
+## Data Cleaning
+ 
+ The format of some variables need to be changed. "date_added" variable format will convert date format by using **as.Date()** function and also "rating", "listed_in", "type" variables' format will convert date format by using **as.factor()** function.
+
+
+
+```{r data-m}
+
+netdf$date_added <- as.Date(netdf$date_added, format = "%B %d, %Y")
+
+netdf$rating <- as.factor(netdf$rating)
+
+netdf$listed_in <- as.factor(netdf$listed_in)
+
+netdf$type <- as.factor(netdf$type)
+
+str(netdf)
+
+```
+
+
+Beside these adjustments, it is important to know if the data have missing values or not. If there are missing values, we can either fill these values or get rid of them. However, also it is significant to know that getting rid of them means also losing some useful part of the data as well. Thus, if these missing values can be filled then they should be filled.
+
+
+```{r na-values}
+
+na_values <- data.frame("Variable"=c(colnames(netdf)), "Missing Values"=sapply(netdf, function(x) sum(is.na(x))), row.names=NULL)
+
+na_values
+
+```
+
+
+Since "rating" column is the categorical variable, we can fill in (approximate) the missing values for "rating" with a mode.
+
+
+```{r mode}
+
+mode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+netdf$rating[is.na(netdf$rating)] <- mode(netdf$rating)
+
+```
+
+We also drop duplicated rows in the data set based on the “title”, “country”, “type”,” release_year” variables.
+
+```{ distinct}
+
+netdf=distinct(netdf, title, country, type, release_year, .keep_all = TRUE)
+
+```
+
+Now, we can look missing values again.
+
+
+```{r}
+
+na_values <- data.frame("Variable"=c(colnames(netdf)), "Missing Values"=sapply(netdf, function(x) sum(is.na(x))), row.names=NULL)
+
+na_values
+
+```
+
+
+# Data Visualizing
+
+## The percentage of Netflix content by type
+
+
+```{r}
+
+content_by_type <- netdf %>% group_by(type) %>% 
+  summarise(count = n())
+
+labels <-  c(content_by_type$type)
+
+perc <- round(100*content_by_type$count/sum(content_by_type$count), 1)
+
+percent <- paste(perc, "%")
+
+ggplot(content_by_type, aes(x = "", y = percent, fill = labels)) +
+  geom_col() +
+  geom_text(aes(label = percent),
+            position = position_stack(vjust = 0.5)) +
+  coord_polar(theta = "y") + 
+  ggtitle("Netflix Content by Type") +
+  theme_void()
+
+```
+
+
+## Top 10 actors 
+
+
+```{r}
+
+cast <- netdf %>% 
+  separate_rows(cast,sep=', ') %>% 
+  group_by(cast) %>% 
+  summarise(count = n()) %>% 
+  arrange(count)
+
+
+cast
+
+```
+
+
+## TV show production in each year
+
+## Turkey's TV show production in last 5 years
+
+
+
+```{r}
+
+turkey_tv_show <- netdf %>% 
+  filter(country == "Turkey" & type == "TV Show")
+
+turkey_tv_show
+
+```
+
+
+# References
+
+Yiğit Erol (2020, April 27). Exploration of Netflix 2020 Dataset with R Markdown (EDA). Retrieved from this [link](https://medium.com/deep-learning-turkiye/exploration-of-netflix-2020-dataset-in-r-markdown-eda-b202bbaec4a)
+
+
